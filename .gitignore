@@ -1,0 +1,19 @@
+venv/
+__pycache__/
+*.pyc
+
+# Transcription outputs
+*.srt
+*.vtt
+*.json
+*.txt
+!requirements*.txt
+
+# Downloaded / working media
+*.mp4
+*.mkv
+*.mov
+*.webm
+*.mp3
+*.wav
+*.m4a

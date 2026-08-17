@@ -1,0 +1,473 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Verbatim · Video → Transcript</title>
+<style>
+  :root{
+    --bg:#f0efec;
+    --panel:#f0efec;
+    --ink:#141414;
+    --muted:#8a8580;
+    --line:#d7d3ce;
+    --red:#e5391f;
+    --drop:#f7f1ef;
+    --drop-line:#d8cfcb;
+    --field:#e9e6e2;
+    --white:#fff;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;height:100%}
+  body{
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    color:var(--ink);background:var(--bg);
+    -webkit-font-smoothing:antialiased;
+  }
+  .topbar{height:14px;background:#000}
+  header{
+    display:flex;align-items:center;justify-content:space-between;
+    padding:20px 26px;border-bottom:1px solid var(--line);
+  }
+  .brand{font-family:Georgia,"Times New Roman",serif;font-weight:700;font-size:24px;letter-spacing:-.01em}
+  .crumb{font-size:13px;letter-spacing:.14em;color:var(--muted);font-weight:600}
+  .top-actions{display:flex;gap:10px}
+  .btn{
+    font:inherit;font-size:14px;font-weight:600;cursor:pointer;
+    background:var(--white);border:1px solid var(--line);border-radius:7px;
+    padding:9px 15px;color:var(--ink);transition:.12s;
+  }
+  .btn:hover{border-color:#b9b4ae}
+  .btn.ghost{background:transparent;border-color:transparent;color:var(--red)}
+  .btn.ghost:hover{background:rgba(229,57,31,.08)}
+
+  .layout{display:grid;grid-template-columns:minmax(360px,1fr) 1.5fr;min-height:calc(100vh - 14px - 70px)}
+  .left{padding:26px 28px;border-right:1px solid var(--line)}
+  .right{padding:26px 30px;display:flex;flex-direction:column}
+
+  /* drop zone */
+  .drop{
+    border:2px dashed var(--drop-line);background:var(--drop);border-radius:10px;
+    padding:34px 30px;cursor:pointer;transition:.15s;
+  }
+  .drop.drag{border-color:var(--red);background:#fbeae6}
+  .drop-label{color:var(--red);font-size:12px;font-weight:700;letter-spacing:.16em;margin-bottom:14px}
+  .drop h2{font-family:Georgia,serif;font-size:34px;margin:0 0 12px;letter-spacing:-.02em}
+  .drop p{margin:0;color:var(--muted);font-size:15px}
+
+  .section-label{font-size:12px;font-weight:700;letter-spacing:.14em;color:#6f6a64;margin:26px 0 10px}
+  .url-row{display:flex;gap:10px}
+  .url-row input{
+    flex:1;font:inherit;font-size:15px;padding:12px 14px;border:1px solid var(--line);
+    border-radius:7px;background:var(--white);color:var(--ink);
+  }
+  .url-row input:focus{outline:none;border-color:#b9b4ae}
+  .url-row .btn{white-space:nowrap}
+  .hint{color:var(--muted);font-size:13px;margin-top:10px}
+
+  .progress{height:6px;background:var(--field);border-radius:4px;margin:22px 0;overflow:hidden}
+  .progress .bar{height:100%;width:0;background:var(--red);transition:width .3s}
+  .progress.indeterminate .bar{width:40%;animation:slide 1.1s infinite ease-in-out}
+  @keyframes slide{0%{margin-left:-40%}100%{margin-left:100%}}
+
+  hr.rule{border:none;border-top:1px solid var(--line);margin:20px 0}
+  .meta{display:grid;grid-template-columns:90px 1fr;row-gap:12px;font-size:15px}
+  .meta dt{color:#6f6a64}
+  .meta dd{margin:0;font-weight:500}
+
+  .settings label.check{display:flex;align-items:center;gap:10px;font-size:15px;margin:12px 0;cursor:pointer}
+  .settings input[type=checkbox]{width:17px;height:17px;accent-color:#2b6cf0;cursor:pointer}
+  select{
+    width:100%;font:inherit;font-size:15px;padding:12px 14px;border:1px solid var(--line);
+    border-radius:7px;background:var(--field);color:var(--ink);cursor:pointer;
+  }
+
+  .transcribe-btn{
+    margin-top:30px;background:var(--red);color:#fff;border:none;border-radius:8px;
+    padding:14px 26px;font-size:16px;font-weight:700;cursor:pointer;transition:.12s;
+  }
+  .transcribe-btn:hover{background:#cc3019}
+  .transcribe-btn:disabled{opacity:.5;cursor:default}
+
+  /* right pane */
+  .right-head{display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid var(--line);padding-bottom:18px}
+  .right-head .title{font-size:13px;letter-spacing:.14em;color:var(--muted);font-weight:600}
+  .right-actions{display:flex;gap:9px}
+  .transcript{flex:1;overflow:auto;padding-top:6px}
+  .empty{height:100%;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:left}
+  .empty h3{font-family:Georgia,serif;font-size:26px;color:#9a938c;margin:0 0 10px}
+  .empty p{color:#a9a29b;font-size:16px;max-width:280px;margin:0;line-height:1.5}
+
+  .seg{display:grid;grid-template-columns:78px 1fr;gap:16px;padding:11px 4px;border-bottom:1px solid #e4e0db}
+  .seg .ts{color:var(--red);font-variant-numeric:tabular-nums;font-size:13px;font-weight:600;padding-top:2px}
+  .seg .tx{font-size:16px;line-height:1.55}
+  .langline{color:var(--muted);font-size:13px;padding:14px 4px 4px}
+
+  /* article view */
+  .article{max-width:680px;padding:8px 4px 40px}
+  .article p{font-size:18px;line-height:1.75;margin:0 0 24px;color:#20201e}
+  .article p:first-of-type{margin-top:6px}
+
+  /* view toggle */
+  .toggle{display:inline-flex;background:var(--field);border:1px solid var(--line);border-radius:7px;padding:2px;margin-right:2px}
+  .toggle-btn{font:inherit;font-size:13px;font-weight:600;border:none;background:transparent;color:#6f6a64;
+    padding:7px 12px;border-radius:5px;cursor:pointer;transition:.12s}
+  .toggle-btn.active{background:var(--white);color:var(--ink);box-shadow:0 1px 2px rgba(0,0,0,.06)}
+
+  .toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:#141414;color:#fff;
+    padding:11px 18px;border-radius:8px;font-size:14px;opacity:0;pointer-events:none;transition:.2s}
+  .toast.show{opacity:1}
+
+  @media(max-width:860px){.layout{grid-template-columns:1fr}.left{border-right:none;border-bottom:1px solid var(--line)}}
+</style>
+</head>
+<body>
+  <div class="topbar"></div>
+  <header>
+    <div class="brand">Verbatim</div>
+    <div class="crumb">VIDEO&nbsp;→&nbsp;TRANSCRIPT</div>
+    <div class="top-actions">
+      <button class="btn" id="stackedBtn">Stacked</button>
+      <button class="btn ghost" id="clearBtn">Clear</button>
+    </div>
+  </header>
+
+  <div class="layout" id="layout">
+    <!-- LEFT -->
+    <section class="left">
+      <div class="drop" id="drop">
+        <div class="drop-label">DROP ZONE</div>
+        <h2>Drag a video here</h2>
+        <p>MP4, MOV, WAV, MP3 — or click to browse.</p>
+      </div>
+      <input type="file" id="fileInput" accept="video/*,audio/*" hidden>
+
+      <div class="section-label">OR PASTE A LINK</div>
+      <div class="url-row">
+        <input type="text" id="urlInput" placeholder="https://… video or podcast URL">
+        <button class="btn" id="fetchBtn">Fetch &amp; transcribe</button>
+      </div>
+      <div class="hint">YouTube, Vimeo, Drive, or any direct media URL.</div>
+
+      <div class="progress" id="progress"><div class="bar" id="bar"></div></div>
+
+      <hr class="rule">
+      <dl class="meta">
+        <dt>File</dt><dd id="mFile">—</dd>
+        <dt>Duration</dt><dd id="mDur">—</dd>
+        <dt>Status</dt><dd id="mStatus">Waiting for a file</dd>
+      </dl>
+
+      <hr class="rule">
+      <div class="settings">
+        <div class="section-label" style="margin-top:0">SETTINGS</div>
+        <div class="section-label" style="margin:4px 0 8px">LANGUAGE</div>
+        <select id="langSelect">
+          <option value="auto">Auto-detect</option>
+          <option value="en" selected>English (US)</option>
+          <option value="es">Spanish</option>
+          <option value="fr">French</option>
+          <option value="de">German</option>
+          <option value="it">Italian</option>
+          <option value="pt">Portuguese</option>
+          <option value="nl">Dutch</option>
+          <option value="ja">Japanese</option>
+          <option value="ko">Korean</option>
+          <option value="zh">Chinese</option>
+          <option value="ru">Russian</option>
+          <option value="ar">Arabic</option>
+          <option value="hi">Hindi</option>
+        </select>
+        <label class="check"><input type="checkbox" id="speakers"> Separate speakers</label>
+        <label class="check"><input type="checkbox" id="fillers" checked> Remove filler words</label>
+      </div>
+
+      <button class="transcribe-btn" id="transcribeBtn">Transcribe</button>
+    </section>
+
+    <!-- RIGHT -->
+    <section class="right">
+      <div class="right-head">
+        <div class="title" id="wordCount">TRANSCRIPT · 0 WORDS</div>
+        <div class="right-actions">
+          <div class="toggle" id="viewToggle">
+            <button class="toggle-btn active" data-view="article">Article</button>
+            <button class="toggle-btn" data-view="timecoded">Timecoded</button>
+          </div>
+          <button class="btn" id="copyBtn">Copy</button>
+          <button class="btn" id="srtBtn">SRT</button>
+          <button class="btn" id="txtBtn">TXT</button>
+        </div>
+      </div>
+      <div class="transcript" id="transcript">
+        <div class="empty" id="empty">
+          <h3>Nothing transcribed yet.</h3>
+          <p>Drop a video on the left and the text lands here, timecoded.</p>
+        </div>
+      </div>
+    </section>
+  </div>
+
+  <div class="toast" id="toast"></div>
+
+<script>
+const $ = id => document.getElementById(id);
+let pickedFile = null;
+let lastResult = null;   // {segments, srt, txt, ...}
+let busy = false;
+let viewMode = 'article';   // 'article' | 'timecoded'
+
+// ---- file picking / drag-drop ----
+const drop = $('drop'), fileInput = $('fileInput');
+drop.addEventListener('click', () => fileInput.click());
+fileInput.addEventListener('change', e => { if (e.target.files[0]) setFile(e.target.files[0]); });
+['dragover','dragenter'].forEach(ev => drop.addEventListener(ev, e => { e.preventDefault(); drop.classList.add('drag'); }));
+['dragleave','drop'].forEach(ev => drop.addEventListener(ev, e => { e.preventDefault(); drop.classList.remove('drag'); }));
+drop.addEventListener('drop', e => { const f = e.dataTransfer.files[0]; if (f) setFile(f); });
+
+function setFile(f){
+  pickedFile = f;
+  $('urlInput').value = '';
+  $('mFile').textContent = f.name;
+  $('mDur').textContent = f.size > 0 ? (f.size/1048576).toFixed(1)+' MB' : '—';
+  $('mStatus').textContent = 'Ready';
+}
+
+function fmtDuration(sec){
+  if (!sec && sec !== 0) return '—';
+  const h = Math.floor(sec/3600), m = Math.floor(sec%3600/60), s = Math.floor(sec%60);
+  return (h? h+':'+String(m).padStart(2,'0') : m) + ':' + String(s).padStart(2,'0');
+}
+
+// ---- transcribe ----
+$('transcribeBtn').addEventListener('click', () => run());
+$('fetchBtn').addEventListener('click', () => run(true));
+$('urlInput').addEventListener('keydown', e => { if (e.key === 'Enter') run(true); });
+
+let liveSegs = [];
+
+async function run(fromUrl){
+  if (busy) return;
+  const url = $('urlInput').value.trim();
+  if (fromUrl && !url){ toast('Paste a link first.'); return; }
+  if (!fromUrl && !pickedFile && !url){ toast('Drop a file or paste a link.'); return; }
+
+  const fd = new FormData();
+  if (!fromUrl && pickedFile){ fd.append('file', pickedFile); }
+  else if (url){ fd.append('url', url); }
+  else if (pickedFile){ fd.append('file', pickedFile); }
+  fd.append('language', $('langSelect').value);
+  fd.append('remove_fillers', $('fillers').checked ? 'true' : 'false');
+
+  setBusy(true);
+  prepareLive();
+  try {
+    const res = await fetch('/transcribe', { method:'POST', body: fd });
+    const ctype = res.headers.get('content-type') || '';
+    if (!res.ok && ctype.includes('application/json')){
+      const e = await res.json(); throw new Error(e.error || 'Transcription failed.');
+    }
+    // Read the Server-Sent Events stream.
+    const reader = res.body.getReader();
+    const dec = new TextDecoder();
+    let buf = '';
+    while (true){
+      const { value, done } = await reader.read();
+      if (done) break;
+      buf += dec.decode(value, { stream:true });
+      let i;
+      while ((i = buf.indexOf('\n\n')) >= 0){
+        const raw = buf.slice(0, i); buf = buf.slice(i + 2);
+        const line = raw.replace(/^data: ?/, '').trim();
+        if (!line) continue;
+        const ev = JSON.parse(line);
+        if (ev.stage === 'error') throw new Error(ev.error);
+        handleEvent(ev);
+      }
+    }
+  } catch (err){
+    $('mStatus').textContent = 'Error';
+    setProgress(0);
+    toast(err.message);
+  } finally {
+    setBusy(false);
+  }
+}
+
+function handleEvent(ev){
+  switch (ev.stage){
+    case 'download':
+      setProgress(2 + (ev.pct||0)*18);
+      $('mStatus').textContent = `Downloading… ${Math.round((ev.pct||0)*100)}%`;
+      break;
+    case 'extract':
+      setProgress(22); $('mStatus').textContent = 'Extracting audio…'; break;
+    case 'model':
+      setProgress(26); $('mStatus').textContent = 'Loading model…'; break;
+    case 'transcribe':
+      setProgress(28 + (ev.pct||0)*70);
+      $('mStatus').textContent = `Transcribing… ${Math.round((ev.pct||0)*100)}%`;
+      if (ev.seg) appendLiveSeg(ev.seg);
+      break;
+    case 'done':
+      setProgress(100);
+      lastResult = ev.payload;
+      render(ev.payload);
+      $('mStatus').textContent = 'Done';
+      if (ev.payload.source_name) $('mFile').textContent = ev.payload.source_name;
+      $('mDur').textContent = fmtDuration(ev.payload.duration);
+      break;
+  }
+}
+
+// Clear the pane and prep a container for segments streaming in live.
+function prepareLive(){
+  liveSegs = [];
+  $('transcript').innerHTML = '<div id="liveWrap"></div>';
+  $('wordCount').textContent = 'TRANSCRIPT · 0 WORDS';
+}
+
+function appendLiveSeg(s){
+  liveSegs.push(s);
+  const wrap = $('liveWrap');
+  if (wrap){
+    const div = document.createElement('div');
+    div.className = 'seg';
+    div.innerHTML = `<div class="ts">${ts(s.start)}</div><div class="tx">${escapeHtml(s.text)}</div>`;
+    wrap.appendChild(div);
+    const t = $('transcript'); t.scrollTop = t.scrollHeight;
+  }
+  const words = liveSegs.reduce((n,x)=> n + x.text.trim().split(/\s+/).filter(Boolean).length, 0);
+  $('wordCount').textContent = `TRANSCRIPT · ${words.toLocaleString()} WORD${words===1?'':'S'}`;
+}
+
+function setProgress(pct){
+  $('progress').classList.remove('indeterminate');
+  $('bar').style.width = Math.max(0, Math.min(100, pct)) + '%';
+}
+
+function setBusy(state){
+  busy = state;
+  $('transcribeBtn').disabled = state;
+  $('fetchBtn').disabled = state;
+  if (state){
+    $('mStatus').textContent = 'Starting…';
+    $('progress').classList.add('indeterminate');
+    $('bar').style.width = '';
+  }
+}
+
+// Group segments into readable paragraphs using natural pauses + sentence ends.
+function buildParagraphs(segments){
+  const GAP = 1.6;      // a pause this long (seconds) can end a paragraph
+  const SOFT = 480;     // aim to break paragraphs around this many chars
+  const HARD = 900;     // never let a paragraph run past this
+  const paras = [];
+  let cur = '', lastEnd = null;
+  for (const s of segments){
+    const text = s.text.trim();
+    if (!text) continue;
+    const gap = lastEnd === null ? 0 : s.start - lastEnd;
+    const endsSentence = /[.!?]["')\]]?$/.test(cur.trim());
+    const shouldBreak = cur && (
+      (gap >= GAP && endsSentence) ||
+      (cur.length >= SOFT && endsSentence) ||
+      cur.length >= HARD
+    );
+    if (shouldBreak){ paras.push(cur.trim()); cur = ''; }
+    cur += (cur ? ' ' : '') + text;
+    lastEnd = s.end;
+  }
+  if (cur.trim()) paras.push(cur.trim());
+  return paras;
+}
+
+function articleText(){
+  if (!lastResult) return '';
+  return buildParagraphs(lastResult.segments || []).join('\n\n') + '\n';
+}
+
+function render(data){
+  const segs = data.segments || [];
+  const t = $('transcript');
+  if (!segs.length){ t.innerHTML = '<div class="empty"><h3>No speech detected.</h3><p>Try a different file or turn off filler removal.</p></div>'; return; }
+
+  let html = '';
+  if (data.language){
+    const pct = data.language_probability ? ' · '+Math.round(data.language_probability*100)+'% conf.' : '';
+    html += `<div class="langline">Detected language: ${data.language.toUpperCase()}${pct}</div>`;
+  }
+  if (viewMode === 'article'){
+    html += '<div class="article">';
+    for (const p of buildParagraphs(segs)){ html += `<p>${escapeHtml(p)}</p>`; }
+    html += '</div>';
+  } else {
+    for (const s of segs){
+      html += `<div class="seg"><div class="ts">${ts(s.start)}</div><div class="tx">${escapeHtml(s.text)}</div></div>`;
+    }
+  }
+  t.innerHTML = html;
+  const words = segs.reduce((n,s)=> n + s.text.trim().split(/\s+/).filter(Boolean).length, 0);
+  $('wordCount').textContent = `TRANSCRIPT · ${words.toLocaleString()} WORD${words===1?'':'S'}`;
+}
+
+// view toggle
+$('viewToggle').addEventListener('click', e => {
+  const btn = e.target.closest('.toggle-btn');
+  if (!btn || btn.dataset.view === viewMode) return;
+  viewMode = btn.dataset.view;
+  $('viewToggle').querySelectorAll('.toggle-btn').forEach(b => b.classList.toggle('active', b.dataset.view === viewMode));
+  if (lastResult) render(lastResult);
+});
+
+function ts(sec){
+  const m = Math.floor(sec/60), s = Math.floor(sec%60);
+  return String(m).padStart(2,'0')+':'+String(s).padStart(2,'0');
+}
+function escapeHtml(str){ const d=document.createElement('div'); d.textContent=str; return d.innerHTML; }
+
+// ---- export actions ----
+$('copyBtn').addEventListener('click', () => {
+  if (!lastResult){ toast('Nothing to copy yet.'); return; }
+  const text = viewMode === 'article' ? articleText() : (lastResult.txt || '');
+  navigator.clipboard.writeText(text).then(()=>toast('Transcript copied.'));
+});
+$('srtBtn').addEventListener('click', () => download('srt'));
+$('txtBtn').addEventListener('click', () => download('txt'));
+function download(kind){
+  if (!lastResult){ toast('Nothing to export yet.'); return; }
+  const txtContent = viewMode === 'article' ? articleText() : lastResult.txt;
+  const content = kind === 'srt' ? lastResult.srt : txtContent;
+  const name = (lastResult.source_name || 'transcript').replace(/\.[^.]+$/, '');
+  const blob = new Blob([content || ''], {type:'text/plain'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob); a.download = `${name}.${kind}`;
+  a.click(); URL.revokeObjectURL(a.href);
+}
+
+// ---- top bar ----
+$('clearBtn').addEventListener('click', () => {
+  pickedFile = null; lastResult = null; liveSegs = [];
+  fileInput.value = ''; $('urlInput').value = '';
+  $('mFile').textContent = '—'; $('mDur').textContent = '—';
+  $('mStatus').textContent = 'Waiting for a file';
+  $('wordCount').textContent = 'TRANSCRIPT · 0 WORDS';
+  $('progress').classList.remove('indeterminate'); $('bar').style.width = '0';
+  $('transcript').innerHTML = '<div class="empty"><h3>Nothing transcribed yet.</h3><p>Drop a video on the left and the text lands here, timecoded.</p></div>';
+});
+$('stackedBtn').addEventListener('click', () => {
+  const l = $('layout');
+  const stacked = l.style.gridTemplateColumns === '1fr';
+  l.style.gridTemplateColumns = stacked ? '' : '1fr';
+  $('stackedBtn').textContent = stacked ? 'Stacked' : 'Side by side';
+});
+
+// ---- toast ----
+let toastTimer;
+function toast(msg){
+  const el = $('toast'); el.textContent = msg; el.classList.add('show');
+  clearTimeout(toastTimer); toastTimer = setTimeout(()=>el.classList.remove('show'), 2600);
+}
+</script>
+</body>
+</html>
